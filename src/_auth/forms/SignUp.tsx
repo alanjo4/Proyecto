@@ -12,11 +12,27 @@ import {
 	FormMessage,
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
+import { Toaster } from "@/components/ui/toaster";
+import Loader from "@/components/shared/Loader";
 
 import { SignupValidation } from "@/lib/validation";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
+import { useToast } from "@/components/ui/use-toast"
+
+import { useCreateUserAccount } from "@/lib/react-query/queries";
+import { useSignInAccount } from "@/lib/react-query/queries";
+
+import { useUserContext } from "@/context/AuthContext";
 
 export default function SignUp() {
+	const { toast } = useToast();
+	const navigate = useNavigate();
+
+	// Queries (react-query library)
+	const { checkAuthUser, isLoading: isUserLoading } = useUserContext();
+	const { mutateAsync: createUserAccount, isPending: isCreatingAccount } = useCreateUserAccount()
+	const { mutateAsync: signInAccount, isPending: isSigningInUser } = useSignInAccount();
+
 	const form = useForm<z.infer<typeof SignupValidation>>({
 		resolver: zodResolver(SignupValidation),
 		defaultValues: {
@@ -29,13 +45,42 @@ export default function SignUp() {
 
 	const handleSignup = async (user: z.infer<typeof SignupValidation>) => {
 		try {
-			//handle signup
-			console.log(user)
+			const newUser = createUserAccount(user);
+
+			if (!newUser) {
+				toast({
+					title: "There was an issue in the sign up",
+				})
+			}
+
+			const session = await signInAccount({
+				email: user.email,
+				password: user.password,
+			})
+
+			if (!session) {
+				toast({
+					title: "Something went wrong. Please login again.",
+				})
+				navigate("/sign-in");
+				return
+			}
+
+			const isLoggedIn = await checkAuthUser();
+
+			if (isLoggedIn) {
+				form.reset();
+				navigate("/");
+			} else {
+				toast({
+					title: "Check your credentials. Please try again.",
+				});
+			}
 		} catch (error) {
-			console.log({ error });
+			console.error({ error });
 		}
 	};
-	/**/
+
 	return (
 		<Form {...form}>
 			<div className="flex-center flex-col sm:w-420">
@@ -111,7 +156,15 @@ export default function SignUp() {
 						)}
 					/>
 
-					<Button type="submit" className="shad-button_primary">Submit</Button>
+					<Button type="submit" className="shad-button_primary">
+						{isCreatingAccount || isSigningInUser || isUserLoading ? (
+							<div className="flex-center gap-2">
+								<Loader /> Loading...
+							</div>
+						) : (
+							"Sign Up"
+						)}
+					</Button>
 
 					<p>
 						Already have an account?
@@ -121,6 +174,7 @@ export default function SignUp() {
 					</p>
 				</form>
 			</div>
+			<Toaster />
 		</Form>
 	)
 }
